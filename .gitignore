@@ -1,0 +1,22 @@
+# Virtual Environment
+.venv/
+env/
+venv/
+ENV/
+
+# Python Cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Data & Models
+# Large model weights (Requires Git LFS for GitHub)
+finetuned_chronos_forecasting/model.safetensors
+
+# OS files
+.DS_Store
+
+# Misc
+*.log
+*.csv
+gunicorn.ctl

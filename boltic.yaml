@@ -1,0 +1,18 @@
+app: "boltic-chronos-forecaster"
+primary_region: "asia-south1"
+
+build:
+  dockerfile: Dockerfile
+
+resources:
+  memory: 4096
+  cpus: 2
+
+services:
+  - port: 8080
+    protocol: tcp
+    internal_port: 8080
+
+env:
+  PORT: "8080"
+  OBJC_DISABLE_INITIALIZE_FORK_SAFETY: "YES"
