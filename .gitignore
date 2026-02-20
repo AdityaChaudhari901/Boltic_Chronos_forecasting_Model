@@ -10,8 +10,7 @@ __pycache__/
 *$py.class
 
 # Data & Models
-# Large model weights (Requires Git LFS for GitHub)
-finetuned_chronos_forecasting/model.safetensors
+# Large model weights (Managed by Git LFS)
 
 # OS files
 .DS_Store
