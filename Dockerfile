@@ -15,12 +15,16 @@ COPY requirements.txt .
 # Force cache bust for pip install
 ARG CACHEBUST=1
 
-# Install Python dependencies
-RUN pip install --no-cache-dir gunicorn
-RUN pip install --no-cache-dir -r requirements.txt
+# Upgrade pip and install core dependencies first
+RUN python -m pip install --upgrade pip
+RUN python -m pip install --no-cache-dir gunicorn flask flask-cors
 
-# Verify installation in build logs
-RUN pip list
+# Install remaining requirements
+RUN python -m pip install --no-cache-dir -r requirements.txt
+
+# Verify installations in build logs (crucial for debugging Boltic)
+RUN python -c "import flask; print(f'Flask version: {flask.__version__}')"
+RUN python -m pip list
 
 # Copy model and application code
 # Path updated to match our fine-tuned name
