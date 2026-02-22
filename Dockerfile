@@ -34,5 +34,6 @@ ENV PYTHONUNBUFFERED=1
 ENV OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES
 
 # Run the application
-# Using gunicorn for production stability on Boltic as previously configured
-CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:${PORT:-8080} --workers 1 --timeout 300 app:app"]
+# Using gunicorn for production stability on Boltic. 
+# We use 'python -m gunicorn' to ensure the binary is easily found in the python path.
+CMD ["sh", "-c", "OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES python -m gunicorn --bind 0.0.0.0:${PORT:-8080} --workers 1 --timeout 300 app:app"]
