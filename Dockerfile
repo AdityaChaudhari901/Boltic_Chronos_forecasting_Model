@@ -16,7 +16,11 @@ COPY requirements.txt .
 ARG CACHEBUST=1
 
 # Install Python dependencies
+RUN pip install --no-cache-dir gunicorn
 RUN pip install --no-cache-dir -r requirements.txt
+
+# Verify installation in build logs
+RUN pip list
 
 # Copy model and application code
 # Path updated to match our fine-tuned name

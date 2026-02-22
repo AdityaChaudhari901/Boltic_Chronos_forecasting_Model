@@ -7,3 +7,4 @@ transformers>=4.38.0
 accelerate>=0.27.0
 chronos-forecasting>=2.0.0
 gunicorn
+# Boltic deployment bump 2026-02-22
