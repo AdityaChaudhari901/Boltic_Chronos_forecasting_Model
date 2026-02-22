@@ -12,18 +12,27 @@ RUN apt-get update && apt-get install -y \
 # Copy requirements first for better caching
 COPY requirements.txt .
 
-# Force cache bust for pip install
-ARG CACHEBUST=1
-
-# Upgrade pip and install core dependencies first
+# Upgrade pip
 RUN python -m pip install --upgrade pip
-RUN python -m pip install --no-cache-dir gunicorn flask flask-cors
 
-# Install remaining requirements
+# Consolidate ALL critical dependencies into one install step
+# This ensures they are all in the same environment and layer
+RUN python -m pip install --no-cache-dir \
+    gunicorn \
+    flask \
+    flask-cors \
+    torch \
+    pandas[pyarrow] \
+    transformers \
+    accelerate \
+    chronos-forecasting>=2.0.0
+
+# Install remaining requirements (backup)
 RUN python -m pip install --no-cache-dir -r requirements.txt
 
-# Verify installations in build logs (crucial for debugging Boltic)
+# CRITICAL: Verify installations in build logs (If this fails, the build will stop)
 RUN python -c "import flask; print(f'Flask version: {flask.__version__}')"
+RUN python -c "import chronos; print('Chronos module found successfully')"
 RUN python -m pip list
 
 # Copy model and application code
