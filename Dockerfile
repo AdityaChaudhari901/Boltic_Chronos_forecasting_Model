@@ -17,30 +17,17 @@ COPY requirements.txt .
 RUN python -m pip install --upgrade pip
 
 # Consolidate ALL critical dependencies into one install step
-# We switch to CPU-only torch to prevent builder OOM (signal: killed)
-# and install to /app/deps to ensure they are available at runtime.
-RUN mkdir -p /app/deps
-ENV PYTHONPATH="/app/deps:${PYTHONPATH}" \
-    PIP_NO_CACHE_DIR=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1
-
+# 1. Use CPU-only torch to prevent builder OOM (signal: killed)
+# 2. Install gunicorn explicitly and verify it in the SAME layer
 RUN python3 -m pip install --upgrade pip && \
-    python3 -m pip install --target /app/deps --index-url https://download.pytorch.org/whl/cpu "torch==2.10.0+cpu" "torchvision==0.21.0+cpu" --extra-index-url https://pypi.org/simple && \
-    python3 -m pip install --target /app/deps -r requirements.txt && \
-    PYTHONPATH=/app/deps python3 -c "import torch; import gunicorn; import flask; print('✅ All dependencies verified in /app/deps')"
-
-# CRITICAL: Verify installations in build logs
-RUN PYTHONPATH=/app/deps python3 -c "from chronos import Chronos2Pipeline; print('Chronos2Pipeline imported successfully')"
-RUN PYTHONPATH=/app/deps python3 -m pip list
+    python3 -m pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu "torch==2.10.0+cpu" "torchvision==0.21.0+cpu" --extra-index-url https://pypi.org/simple && \
+    python3 -m pip install --no-cache-dir -r requirements.txt && \
+    python3 -m pip install --upgrade --no-cache-dir "gunicorn==25.1.0" && \
+    python3 -c "import gunicorn; import torch; from chronos import Chronos2Pipeline; print('✅ All dependencies verified')"
 
 # Copy model and application code
-# Path updated to match our fine-tuned name
 COPY finetuned_chronos_forecasting/ ./finetuned_chronos_forecasting/
 COPY app.py .
-COPY start.sh .
-
-# Ensure start.sh is executable
-RUN chmod +x start.sh
 
 # Expose port
 EXPOSE 8080
