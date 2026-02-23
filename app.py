@@ -29,19 +29,28 @@ def load_model():
         import torch
         from chronos import Chronos2Pipeline
         
-        model_path = "./finetuned_chronos_forecasting"
+        model_name = "finetuned_chronos_forecasting"
+        model_path = f"./{model_name}"
+        
         if not os.path.exists(model_path):
             print(f"Local model not found at {model_path}, utilizing base model 'amazon/chronos-2'...")
             model_path = "amazon/chronos-2"
         
-        print(f"Loading model from {model_path}...")
-            
-        pipeline = Chronos2Pipeline.from_pretrained(
-            model_path,
-            device_map="auto",
-            torch_dtype=torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float32
-        )
-        print("✅ Model loaded!")
+        print(f"Loading model from {model_path} into memory...")
+        try:
+            # Explicitly target CPU and use low_cpu_mem_usage to prevent OOM
+            pipeline = Chronos2Pipeline.from_pretrained(
+                model_path,
+                device_map="cpu", 
+                torch_dtype=torch.float32,
+                low_cpu_mem_usage=True
+            )
+            print("✅ Model loaded successfully!")
+        except Exception as e:
+            print(f"❌ Error during model loading: {e}")
+            import traceback
+            traceback.print_exc()
+            raise
     return pipeline
 
 @app.route('/health', methods=['GET'])
