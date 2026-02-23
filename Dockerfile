@@ -17,17 +17,19 @@ COPY requirements.txt .
 RUN python -m pip install --upgrade pip
 
 # Consolidate ALL critical dependencies into one install step
-# We install to a local directory /app/deps to ensure they are bundled with the app
+# We switch to CPU-only torch to prevent builder OOM (signal: killed)
+# and install to /app/deps to ensure they are available at runtime.
 RUN mkdir -p /app/deps
-ENV PYTHONPATH="/app/deps:${PYTHONPATH}"
+ENV PYTHONPATH="/app/deps:${PYTHONPATH}" \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
 
-RUN python3 -m pip install --no-cache-dir --target /app/deps -r requirements.txt
+RUN python3 -m pip install --upgrade pip && \
+    python3 -m pip install --target /app/deps --index-url https://download.pytorch.org/whl/cpu "torch==2.10.0+cpu" "torchvision==0.21.0+cpu" --extra-index-url https://pypi.org/simple && \
+    python3 -m pip install --target /app/deps -r requirements.txt && \
+    PYTHONPATH=/app/deps python3 -c "import torch; import gunicorn; import flask; print('✅ All dependencies verified in /app/deps')"
 
 # CRITICAL: Verify installations in build logs
-# We must include /app/deps in the path for these checks too
-RUN PYTHONPATH=/app/deps python3 -c "import flask; print(f'Flask version: {flask.__version__}')"
-RUN PYTHONPATH=/app/deps python3 -c "import torch; print(f'Torch version: {torch.__version__}')"
-RUN PYTHONPATH=/app/deps python3 -c "import gunicorn; print(f'Gunicorn version: {gunicorn.__version__}')"
 RUN PYTHONPATH=/app/deps python3 -c "from chronos import Chronos2Pipeline; print('Chronos2Pipeline imported successfully')"
 RUN PYTHONPATH=/app/deps python3 -m pip list
 
