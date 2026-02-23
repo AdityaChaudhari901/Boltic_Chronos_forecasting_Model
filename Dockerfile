@@ -33,12 +33,11 @@ COPY app.py .
 EXPOSE 8080
 
 # Set environment variables
-ENV PORT=8080
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV PYTHONUNBUFFERED=1
-# Critical fix for PyTorch/macOS/Linux fork safety in containers
-ENV OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES
+ENV PORT=8080 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES
 
-# Run the application
-# We use start.sh for a robust, platform-proof boot sequence.
-CMD ["/app/start.sh"]
+# Run the application directly using python3 -m gunicorn
+# This is more reliable for finding modules than just 'gunicorn'
+CMD ["python3", "-m", "gunicorn", "--bind", "0.0.0.0:8080", "--workers", "1", "--timeout", "300", "--access-logfile", "-", "--error-logfile", "-", "app:app"]
