@@ -17,16 +17,19 @@ COPY requirements.txt .
 RUN python -m pip install --upgrade pip
 
 # Consolidate ALL critical dependencies into one install step
-# This ensures they are all in the same environment and layer
-# We use the requirements.txt as the source of truth to avoid churn
-RUN python3 -m pip install --no-cache-dir -r requirements.txt
+# We install to a local directory /app/deps to ensure they are bundled with the app
+RUN mkdir -p /app/deps
+ENV PYTHONPATH="/app/deps:${PYTHONPATH}"
 
-# CRITICAL: Verify installations in build logs (If this fails, the build will stop)
-RUN python3 -c "import flask; print(f'Flask version: {flask.__version__}')"
-RUN python3 -c "import torch; print(f'Torch version: {torch.__version__}')"
-RUN python3 -c "import gunicorn; print(f'Gunicorn version: {gunicorn.__version__}')"
-RUN python3 -c "from chronos import Chronos2Pipeline; print('Chronos2Pipeline imported successfully')"
-RUN python3 -m pip list
+RUN python3 -m pip install --no-cache-dir --target /app/deps -r requirements.txt
+
+# CRITICAL: Verify installations in build logs
+# We must include /app/deps in the path for these checks too
+RUN PYTHONPATH=/app/deps python3 -c "import flask; print(f'Flask version: {flask.__version__}')"
+RUN PYTHONPATH=/app/deps python3 -c "import torch; print(f'Torch version: {torch.__version__}')"
+RUN PYTHONPATH=/app/deps python3 -c "import gunicorn; print(f'Gunicorn version: {gunicorn.__version__}')"
+RUN PYTHONPATH=/app/deps python3 -c "from chronos import Chronos2Pipeline; print('Chronos2Pipeline imported successfully')"
+RUN PYTHONPATH=/app/deps python3 -m pip list
 
 # Copy model and application code
 # Path updated to match our fine-tuned name

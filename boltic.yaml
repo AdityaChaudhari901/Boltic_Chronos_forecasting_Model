@@ -20,3 +20,4 @@ experimental:
 env:
   PORT: "8080"
   OBJC_DISABLE_INITIALIZE_FORK_SAFETY: "YES"
+  PYTHONPATH: "/app/deps"

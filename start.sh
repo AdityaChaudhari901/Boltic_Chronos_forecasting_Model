@@ -4,9 +4,17 @@ set -e
 # Port handling for Boltic
 PORT=${PORT:-8080}
 
+# Robust Path Handling: Ensure /app/deps is in PYTHONPATH
+export PYTHONPATH="/app/deps:${PYTHONPATH}"
+
 echo "🚀 Booting Chronos Forecasting Service..."
 echo "Interpreter: $(which python3)"
 echo "Python Version: $(python3 --version)"
+echo "PYTHONPATH: ${PYTHONPATH}"
+
+# Diagnostics: List deps directory if things go wrong
+echo "Contents of /app/deps:"
+ls -F /app/deps | head -n 10
 
 # Verification of gunicorn
 if ! python3 -c "import gunicorn; print('✅ gunicorn ok', gunicorn.__version__)" ; then
