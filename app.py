@@ -4,18 +4,7 @@ Strict Compliance: Uses Chronos2Pipeline.predict_df()
 """
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-try:
-    from chronos import Chronos2Pipeline
-    print("✅ Successfully imported Chronos2Pipeline from chronos")
-except ImportError as e:
-    print(f"❌ Failed to import Chronos2Pipeline: {e}")
-    import traceback
-    traceback.print_exc()
-    # Re-raise to ensure gunicorn/flask know about the failure
-    raise
-
 import pandas as pd
-import torch
 import os
 import io
 import sys
@@ -35,6 +24,11 @@ def load_model():
     """Load model from local fine-tuned directory or fallback to base."""
     global pipeline
     if pipeline is None:
+        # Lazy imports to prevent startup timeout
+        print("Lazy loading heavy dependencies (torch, chronos)...")
+        import torch
+        from chronos import Chronos2Pipeline
+        
         model_path = "./finetuned_chronos_forecasting"
         if not os.path.exists(model_path):
             print(f"Local model not found at {model_path}, utilizing base model 'amazon/chronos-2'...")
