@@ -19,6 +19,7 @@ CORS(app)
 
 # Global model instance
 pipeline = None
+loading_thread = None
 
 def load_model():
     """Load model from local fine-tuned directory or fallback to base."""
@@ -50,12 +51,41 @@ def load_model():
             print(f"❌ Error during model loading: {e}")
             import traceback
             traceback.print_exc()
-            raise
+            # Don't raise here if in thread, just log
     return pipeline
+
+import threading
+def start_loading():
+    global loading_thread
+    loading_thread = threading.Thread(target=load_model, daemon=True)
+    loading_thread.start()
+
+# Start background loading immediately
+start_loading()
 
 @app.route('/health', methods=['GET'])
 def health():
-    return jsonify({'status': 'healthy', 'model_loaded': pipeline is not None})
+    return jsonify({
+        'status': 'healthy', 
+        'model_loaded': pipeline is not None,
+        'model_loading_in_progress': loading_thread is not None and loading_thread.is_alive()
+    })
+
+@app.route('/diagnostics', methods=['GET'])
+def diagnostics():
+    """Check if model files are actual weights or just LFS pointers."""
+    diag = {}
+    model_path = "./finetuned_chronos_forecasting/model.safetensors"
+    if os.path.exists(model_path):
+        size = os.path.getsize(model_path)
+        diag['model_size_bytes'] = size
+        diag['is_lfs_pointer'] = size < 1000 # LFS pointers are tiny
+    else:
+        diag['error'] = "Model file not found"
+    
+    diag['python_version'] = sys.version
+    diag['cwd'] = os.getcwd()
+    return jsonify(diag)
 
 @app.route('/forecast/csv', methods=['POST'])
 def forecast_csv():
@@ -64,8 +94,12 @@ def forecast_csv():
     Expected columns: id (SKU), timestamp, target (demand), [covariates...]
     """
     try:
-        # Load Model
-        cols_model = load_model()
+        # Check if model is still loading
+        if pipeline is None:
+            if loading_thread and loading_thread.is_alive():
+                return jsonify({'error': 'Model is still loading in background. Please wait ~30s and try again.'}), 503
+            else:
+                load_model() # Try loading if not started
         
         # Parse Request
         if 'file' not in request.files:
