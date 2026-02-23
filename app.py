@@ -4,11 +4,21 @@ Strict Compliance: Uses Chronos2Pipeline.predict_df()
 """
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-from chronos import Chronos2Pipeline
+try:
+    from chronos import Chronos2Pipeline
+    print("✅ Successfully imported Chronos2Pipeline from chronos")
+except ImportError as e:
+    print(f"❌ Failed to import Chronos2Pipeline: {e}")
+    import traceback
+    traceback.print_exc()
+    # Re-raise to ensure gunicorn/flask know about the failure
+    raise
+
 import pandas as pd
 import torch
 import os
 import io
+import sys
 
 # Configuration / Constants
 DEMAND_INCREASE_THRESHOLD = 1.2

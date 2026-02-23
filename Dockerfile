@@ -7,6 +7,7 @@ WORKDIR /app
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
     git \
+    libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first for better caching
@@ -32,7 +33,8 @@ RUN python -m pip install --no-cache-dir -r requirements.txt
 
 # CRITICAL: Verify installations in build logs (If this fails, the build will stop)
 RUN python -c "import flask; print(f'Flask version: {flask.__version__}')"
-RUN python -c "import chronos; print('Chronos module found successfully')"
+RUN python -c "import torch; print(f'Torch version: {torch.__version__}')"
+RUN python -c "from chronos import Chronos2Pipeline; print('Chronos2Pipeline imported successfully')"
 RUN python -m pip list
 
 # Copy model and application code
