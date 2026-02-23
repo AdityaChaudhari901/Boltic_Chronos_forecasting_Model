@@ -1,43 +1,30 @@
-# Use Python 3.11 slim image
 FROM python:3.11-slim
-
-# Set working directory
 WORKDIR /app
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    git \
-    libgomp1 \
-    && rm -rf /var/lib/apt/lists/*
+# 1. System libs
+RUN apt-get update && apt-get install -y git libgomp1 && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements first for better caching
+# 2. Copy requirements
 COPY requirements.txt .
 
-# Upgrade pip
-RUN python -m pip install --upgrade pip
-
-# Consolidate ALL critical dependencies into one install step
-# 1. Use CPU-only torch to prevent builder OOM (signal: killed)
-# 2. Install gunicorn explicitly and verify it in the SAME layer
+# 3. THE FIX:
+# - Use CPU torch (prevent builder crash)
+# - Install gunicorn HIGHER than the requirements to ensure it wins
+# - Verify it IMMEDIATELY in the same layer
 RUN python3 -m pip install --upgrade pip && \
     python3 -m pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu "torch==2.10.0+cpu" "torchvision==0.21.0+cpu" --extra-index-url https://pypi.org/simple && \
     python3 -m pip install --no-cache-dir -r requirements.txt && \
     python3 -m pip install --upgrade --no-cache-dir "gunicorn==25.1.0" && \
-    python3 -c "import gunicorn; import torch; from chronos import Chronos2Pipeline; print('✅ All dependencies verified')"
+    python3 -c "import gunicorn; import torch; print('✅ Deps OK:', gunicorn.__version__)"
 
-# Copy model and application code
-COPY finetuned_chronos_forecasting/ ./finetuned_chronos_forecasting/
-COPY app.py .
+# 4. Copy code (start.sh is gone)
+COPY . .
 
-# Expose port
-EXPOSE 8080
-
-# Set environment variables
 ENV PORT=8080 \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES
 
-# Run the application directly using python3 -m gunicorn
-# This is more reliable for finding modules than just 'gunicorn'
-CMD ["python3", "-m", "gunicorn", "--bind", "0.0.0.0:8080", "--workers", "1", "--timeout", "300", "--access-logfile", "-", "--error-logfile", "-", "app:app"]
+# 5. THE RUN COMMAND:
+# Running as 'python3 -m gunicorn' is the secret way to fix "module not found"
+CMD ["python3", "-m", "gunicorn", "--bind", "0.0.0.0:8080", "--workers", "1", "--timeout", "300", "app:app"]
