@@ -18,29 +18,24 @@ RUN python -m pip install --upgrade pip
 
 # Consolidate ALL critical dependencies into one install step
 # This ensures they are all in the same environment and layer
-RUN python -m pip install --no-cache-dir \
-    gunicorn \
-    flask \
-    flask-cors \
-    torch \
-    pandas[pyarrow] \
-    transformers \
-    accelerate \
-    chronos-forecasting>=2.0.0
-
-# Install remaining requirements (backup)
-RUN python -m pip install --no-cache-dir -r requirements.txt
+# We use the requirements.txt as the source of truth to avoid churn
+RUN python3 -m pip install --no-cache-dir -r requirements.txt
 
 # CRITICAL: Verify installations in build logs (If this fails, the build will stop)
-RUN python -c "import flask; print(f'Flask version: {flask.__version__}')"
-RUN python -c "import torch; print(f'Torch version: {torch.__version__}')"
-RUN python -c "from chronos import Chronos2Pipeline; print('Chronos2Pipeline imported successfully')"
-RUN python -m pip list
+RUN python3 -c "import flask; print(f'Flask version: {flask.__version__}')"
+RUN python3 -c "import torch; print(f'Torch version: {torch.__version__}')"
+RUN python3 -c "import gunicorn; print(f'Gunicorn version: {gunicorn.__version__}')"
+RUN python3 -c "from chronos import Chronos2Pipeline; print('Chronos2Pipeline imported successfully')"
+RUN python3 -m pip list
 
 # Copy model and application code
 # Path updated to match our fine-tuned name
 COPY finetuned_chronos_forecasting/ ./finetuned_chronos_forecasting/
 COPY app.py .
+COPY start.sh .
+
+# Ensure start.sh is executable
+RUN chmod +x start.sh
 
 # Expose port
 EXPOSE 8080
@@ -53,6 +48,5 @@ ENV PYTHONUNBUFFERED=1
 ENV OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES
 
 # Run the application
-# Using gunicorn for production stability on Boltic. 
-# We use 'python -m gunicorn' to ensure the binary is easily found in the python path.
-CMD ["sh", "-c", "OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES python -m gunicorn --bind 0.0.0.0:${PORT:-8080} --workers 1 --timeout 300 app:app"]
+# We use start.sh for a robust, platform-proof boot sequence.
+CMD ["/app/start.sh"]
