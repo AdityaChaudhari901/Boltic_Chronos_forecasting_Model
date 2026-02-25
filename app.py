@@ -19,19 +19,21 @@ CORS(app)
 
 import gc
 import datetime
+import threading
 
 # Global model state
 pipeline = None
 loading_thread = None
 load_error = None
 loading_logs = []
+_loading_started = False
+_loading_lock = threading.Lock()
 
 def log_status(msg):
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     formatted_msg = f"[{timestamp}] {msg}"
-    print(formatted_msg)
+    print(formatted_msg, flush=True)
     loading_logs.append(formatted_msg)
-    # Keep only last 50 logs
     if len(loading_logs) > 50:
         loading_logs.pop(0)
 
@@ -40,42 +42,36 @@ def load_model():
     global pipeline, load_error
     if pipeline is None:
         try:
-            log_status("📍 Initializing background model-loading thread...")
-            
-            # Optimization: GC collect before heavy imports
+            log_status("📍 Starting model load in worker process...")
             gc.collect()
-            
-            log_status("🚀 Background thread started — importing torch...")
+
+            log_status("🚀 Importing torch (this may take 30-120s)...")
             import torch
-            
-            # Optimization: Limit torch to 1 CPU thread to reduce overhead
             torch.set_num_threads(1)
             log_status(f"✅ Torch imported (v{torch.__version__}). Importing Chronos...")
-            
+
             from chronos import Chronos2Pipeline
             log_status("✅ Chronos imported. Checking model path...")
-            
+
             model_name = "finetuned_chronos_forecasting"
             model_path = f"./{model_name}"
-            
+
             if not os.path.exists(model_path):
-                log_status(f"⚠️ Local model not found at {model_path}, utilizing base model 'amazon/chronos-2'...")
+                log_status(f"⚠️ Local model not found at {model_path}, using base 'amazon/chronos-2'...")
                 model_path = "amazon/chronos-2"
             else:
-                # Check if it's an LFS pointer
-                size = os.path.getsize(f"{model_path}/model.safetensors") if os.path.exists(f"{model_path}/model.safetensors") else 0
-                if size < 1000 and size > 0:
-                    log_status("❌ CRITICAL: Local model file is an LFS pointer! Falling back to base model.")
+                mf = f"{model_path}/model.safetensors"
+                size = os.path.getsize(mf) if os.path.exists(mf) else 0
+                if 0 < size < 1000:
+                    log_status("❌ CRITICAL: model.safetensors is an LFS pointer! Falling back to base model.")
                     model_path = "amazon/chronos-2"
                 else:
-                    log_status(f"📂 Found local model ({size/1024/1024:.2f} MB).")
+                    log_status(f"📂 Found local model ({size/1024/1024:.1f} MB).")
 
-            log_status(f"📦 Loading model from {model_path} into CPU memory...")
-            
-            # Explicitly target CPU and use low_cpu_mem_usage to prevent OOM
+            log_status(f"📦 Loading model from '{model_path}' into CPU memory...")
             pipeline = Chronos2Pipeline.from_pretrained(
                 model_path,
-                device_map="cpu", 
+                device_map="cpu",
                 torch_dtype=torch.float32,
                 low_cpu_mem_usage=True
             )
@@ -89,18 +85,34 @@ def load_model():
             load_error = str(e)
     return pipeline
 
-import threading
-def start_loading():
-    global loading_thread
-    loading_thread = threading.Thread(target=load_model, daemon=True)
-    loading_thread.start()
+def ensure_loading_started():
+    """Start background loading exactly once, AFTER the gunicorn fork.
+    This prevents the PyTorch fork/deadlock issue.
+    """
+    global loading_thread, _loading_started
+    with _loading_lock:
+        if not _loading_started:
+            _loading_started = True
+            log_status("🔔 First request received — starting background model load...")
+            loading_thread = threading.Thread(target=load_model, daemon=True)
+            loading_thread.start()
 
-# Start background loading immediately
-start_loading()
+# NOTE: We do NOT call start_loading() here at module level.
+# Loading is triggered on the first /health or /warmup request,
+# which happens AFTER gunicorn has forked the worker process.
+# This prevents the classic PyTorch fork deadlock.
+
+
+@app.route('/warmup', methods=['GET'])
+def warmup():
+    """Trigger model loading (call this after deployment to start warm-up)."""
+    ensure_loading_started()
+    return jsonify({'status': 'warmup_triggered', 'loading_in_progress': _loading_started})
 
 @app.route('/status', methods=['GET'])
 def status():
     """Endpoint to check the detailed loading progress."""
+    ensure_loading_started()
     return jsonify({
         'model_loaded': pipeline is not None,
         'load_error': load_error,
@@ -113,8 +125,9 @@ def status():
 
 @app.route('/health', methods=['GET'])
 def health():
+    ensure_loading_started()
     return jsonify({
-        'status': 'healthy', 
+        'status': 'healthy',
         'model_loaded': pipeline is not None,
         'model_loading_in_progress': loading_thread is not None and loading_thread.is_alive()
     })
