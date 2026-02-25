@@ -17,28 +17,61 @@ PEAK_DEMAND_THRESHOLD = 1.5
 app = Flask(__name__)
 CORS(app)
 
-# Global model instance
+import gc
+import datetime
+
+# Global model state
 pipeline = None
 loading_thread = None
+load_error = None
+loading_logs = []
+
+def log_status(msg):
+    timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    formatted_msg = f"[{timestamp}] {msg}"
+    print(formatted_msg)
+    loading_logs.append(formatted_msg)
+    # Keep only last 50 logs
+    if len(loading_logs) > 50:
+        loading_logs.pop(0)
 
 def load_model():
-    """Load model from local fine-tuned directory or fallback to base."""
-    global pipeline
+    """Load model with advanced logging and resource optimization."""
+    global pipeline, load_error
     if pipeline is None:
-        # Lazy imports to prevent startup timeout
-        print("Lazy loading heavy dependencies (torch, chronos)...")
-        import torch
-        from chronos import Chronos2Pipeline
-        
-        model_name = "finetuned_chronos_forecasting"
-        model_path = f"./{model_name}"
-        
-        if not os.path.exists(model_path):
-            print(f"Local model not found at {model_path}, utilizing base model 'amazon/chronos-2'...")
-            model_path = "amazon/chronos-2"
-        
-        print(f"Loading model from {model_path} into memory...")
         try:
+            log_status("📍 Initializing background model-loading thread...")
+            
+            # Optimization: GC collect before heavy imports
+            gc.collect()
+            
+            log_status("🚀 Background thread started — importing torch...")
+            import torch
+            
+            # Optimization: Limit torch to 1 CPU thread to reduce overhead
+            torch.set_num_threads(1)
+            log_status(f"✅ Torch imported (v{torch.__version__}). Importing Chronos...")
+            
+            from chronos import Chronos2Pipeline
+            log_status("✅ Chronos imported. Checking model path...")
+            
+            model_name = "finetuned_chronos_forecasting"
+            model_path = f"./{model_name}"
+            
+            if not os.path.exists(model_path):
+                log_status(f"⚠️ Local model not found at {model_path}, utilizing base model 'amazon/chronos-2'...")
+                model_path = "amazon/chronos-2"
+            else:
+                # Check if it's an LFS pointer
+                size = os.path.getsize(f"{model_path}/model.safetensors") if os.path.exists(f"{model_path}/model.safetensors") else 0
+                if size < 1000 and size > 0:
+                    log_status("❌ CRITICAL: Local model file is an LFS pointer! Falling back to base model.")
+                    model_path = "amazon/chronos-2"
+                else:
+                    log_status(f"📂 Found local model ({size/1024/1024:.2f} MB).")
+
+            log_status(f"📦 Loading model from {model_path} into CPU memory...")
+            
             # Explicitly target CPU and use low_cpu_mem_usage to prevent OOM
             pipeline = Chronos2Pipeline.from_pretrained(
                 model_path,
@@ -46,12 +79,14 @@ def load_model():
                 torch_dtype=torch.float32,
                 low_cpu_mem_usage=True
             )
-            print("✅ Model loaded successfully!")
+            log_status("✅ Model loaded successfully!")
+            load_error = None
         except Exception as e:
-            print(f"❌ Error during model loading: {e}")
             import traceback
+            err_msg = f"❌ Error during model loading: {str(e)}"
+            log_status(err_msg)
             traceback.print_exc()
-            # Don't raise here if in thread, just log
+            load_error = str(e)
     return pipeline
 
 import threading
@@ -62,6 +97,19 @@ def start_loading():
 
 # Start background loading immediately
 start_loading()
+
+@app.route('/status', methods=['GET'])
+def status():
+    """Endpoint to check the detailed loading progress."""
+    return jsonify({
+        'model_loaded': pipeline is not None,
+        'load_error': load_error,
+        'loading_logs': loading_logs,
+        'memory_info': {
+            'pid': os.getpid(),
+            'python_version': sys.version
+        }
+    })
 
 @app.route('/health', methods=['GET'])
 def health():
@@ -247,7 +295,7 @@ def forecast_csv():
         # Call predict_df
         # This returns a DataFrame with predictions
         # It handles grouping by 'id' automatically
-        forecast_df = cols_model.predict_df(
+        forecast_df = pipeline.predict_df(
             history_df,
             future_df=future_df, # Can be None
             prediction_length=prediction_length,
