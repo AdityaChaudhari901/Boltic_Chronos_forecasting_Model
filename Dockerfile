@@ -21,8 +21,12 @@ COPY . .
 ENV PORT=8080 \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
+    OMP_NUM_THREADS=1 \
+    MKL_NUM_THREADS=1 \
+    OPENBLAS_NUM_THREADS=1 \
+    NUMEXPR_NUM_THREADS=1 \
     OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES
 
 # 5. THE RUN COMMAND:
 # Running as 'python3 -m gunicorn' is the secret way to fix "module not found"
-CMD ["python3", "-m", "gunicorn", "--bind", "0.0.0.0:8080", "--workers", "1", "--timeout", "300", "app:app"]
+CMD ["python3", "-m", "gunicorn", "--bind", "0.0.0.0:8080", "--workers", "1", "--timeout", "600", "--graceful-timeout", "600", "app:app"]

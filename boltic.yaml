@@ -1,4 +1,4 @@
-app: "boltic-chronos-forecaster"
+app: "shopify-chronos-forecasting-model"
 primary_region: "asia-south1"
 
 build:
